@@ -2,6 +2,8 @@ A7DO_PROJECT_LIFE/
 │
 ├── 00_CORE_EXISTENCE/
 │   ├── identity/
+
+
 │   │   ├── self_id.py
 │   │   ├── continuity.py
 │   │   └── naming.py
