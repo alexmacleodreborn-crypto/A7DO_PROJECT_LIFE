@@ -1,0 +1,226 @@
+A7DO_PROJECT_LIFE/
+│
+├── 00_CORE_EXISTENCE/
+│   ├── identity/
+│   │   ├── self_id.py
+│   │   ├── continuity.py
+│   │   └── naming.py
+│   │
+│   ├── heartbeat/
+│   │   ├── clock.py
+│   │   ├── pulse.py
+│   │   └── sleep_wake.py
+│   │
+│   ├── lifecycle/
+│   │   ├── stages.py
+│   │   ├── transitions.py
+│   │   └── death.py
+│   │
+│   └── bootstrap/
+│       ├── seed_init.py
+│       └── run.py
+│
+├── 01_PHYSICS_SANITY_SANDYS_LAW/
+│   ├── scalar_field/
+│   │   ├── dynamics.py
+│   │   └── visibility.py
+│   │
+│   ├── curvature/
+│   │   └── spacetime.py
+│   │
+│   ├── coupling/
+│   │   ├── matter.py
+│   │   ├── photon.py
+│   │   └── gravity.py
+│   │
+│   ├── energy/
+│   │   ├── unified_energy.py
+│   │   ├── metabolism.py
+│   │   └── fatigue.py
+│   │
+│   ├── causality/
+│   │   ├── forward_only.py
+│   │   └── no_free_work.py
+│   │
+│   ├── gating.py
+│   ├── conservation.py
+│   └── falsifiability.py
+│
+├── 02_NERVOUS_SYSTEM/
+│   ├── central_nervous_system/
+│   │   ├── consciousness.py
+│   │   ├── attention.py
+│   │   ├── reasoning.py
+│   │   ├── planning.py
+│   │   ├── language.py
+│   │   └── metacognition.py
+│   │
+│   ├── peripheral_nervous_system/
+│   │   ├── afferent.py
+│   │   ├── efferent.py
+│   │   └── reflexes.py
+│   │
+│   └── signal_encoding/
+│       ├── spike.py
+│       └── latency.py
+│
+├── 03_BODY_SYSTEM/
+│   ├── morphology/
+│   │   ├── skeleton.py
+│   │   ├── joints.py
+│   │   ├── muscles.py
+│   │   └── posture.py
+│   │
+│   ├── limbs/
+│   │   ├── arms/
+│   │   │   ├── shoulder.py
+│   │   │   ├── elbow.py
+│   │   │   ├── wrist.py
+│   │   │   └── hand/
+│   │   │       ├── palm.py
+│   │   │       ├── thumb.py
+│   │   │       ├── index.py
+│   │   │       ├── middle.py
+│   │   │       ├── ring.py
+│   │   │       └── little.py
+│   │   │
+│   │   ├── legs/
+│   │   │   ├── hip.py
+│   │   │   ├── knee.py
+│   │   │   ├── ankle.py
+│   │   │   └── foot.py
+│   │   │
+│   │   └── head/
+│   │       ├── neck.py
+│   │       └── orientation.py
+│   │
+│   ├── motor_control/
+│   │   ├── gross_motor.py
+│   │   ├── fine_motor.py
+│   │   ├── coordination.py
+│   │   └── motor_learning.py
+│   │
+│   └── body_schema/
+│       └── self_map.py
+│
+├── 04_SENSORY_SYSTEM/
+│   ├── vision/
+│   │   ├── retina.py
+│   │   ├── depth.py
+│   │   ├── motion.py
+│   │   └── object_binding.py
+│   │
+│   ├── audition/
+│   │   ├── sound.py
+│   │   ├── direction.py
+│   │   └── rhythm.py
+│   │
+│   ├── olfaction/
+│   │   ├── smell.py
+│   │   ├── chemical_space.py
+│   │   └── memory_link.py
+│   │
+│   ├── touch/
+│   │   ├── pressure.py
+│   │   ├── texture.py
+│   │   ├── temperature.py
+│   │   └── pain.py
+│   │
+│   ├── proprioception/
+│   │   ├── balance.py
+│   │   ├── joint_position.py
+│   │   └── body_orientation.py
+│   │
+│   ├── interoception/
+│   │   ├── energy.py
+│   │   ├── stress.py
+│   │   └── comfort.py
+│   │
+│   └── environment_sense/
+│       ├── weather.py
+│       ├── light.py
+│       └── atmosphere.py
+│
+├── 05_METABOLISM_AND_HOMEOSTASIS/
+│   ├── energy_budget.py
+│   ├── recovery.py
+│   ├── overload.py
+│   └── regulation.py
+│
+├── 06_LIMBIC_AND_VALUE_SYSTEM/
+│   ├── emotions.py
+│   ├── motivation.py
+│   ├── curiosity.py
+│   ├── trust.py
+│   └── salience.py
+│
+├── 07_MEMORY_SYSTEM/
+│   ├── episodic.py
+│   ├── semantic.py
+│   ├── procedural.py
+│   ├── autobiographical.py
+│   └── forgetting.py
+│
+├── 08_DEVELOPMENT_SYSTEM/
+│   ├── embryonic.py
+│   ├── infant.py
+│   ├── toddler.py
+│   ├── child.py
+│   ├── adolescent.py
+│   └── adult.py
+│
+├── 09_WORLD_MODEL/
+│   ├── physics.py
+│   ├── time.py
+│   ├── causality_graph.py
+│   ├── agents.py
+│   └── environments/
+│       ├── home.py
+│       ├── society.py
+│       ├── nature.py
+│       ├── weather_system.py
+│       └── abstract.py
+│
+├── 10_MULTI_AGENT_COUNCIL/
+│   ├── core_self.py
+│   ├── logic_agent.py
+│   ├── emotion_agent.py
+│   ├── ethics_agent.py
+│   ├── planner_agent.py
+│   ├── critic_agent.py
+│   └── meta_agent.py
+│
+├── 11_SAFETY_AND_GOVERNANCE/
+│   ├── ethics.py
+│   ├── alignment.py
+│   ├── immune_system.py
+│   ├── audit.py
+│   └── shutdown_authority.py
+│
+├── 12_INTERFACE_AND_OBSERVABILITY/
+│   ├── api.py
+│   ├── dashboard.py
+│   ├── visualization.py
+│   └── logging.py
+│
+├── 13_EVIDENCE_AND_SANDYS_LAW_LEDGER/
+│   ├── datasets/
+│   ├── correlations.py
+│   ├── trait_scoring.py
+│   └── reports/
+│
+├── docs/
+│   ├── architecture.md
+│   ├── lifecycle.md
+│   ├── sandys_law.md
+│   └── development_notes.md
+│
+├── tests/
+│   ├── physics_tests/
+│   ├── sensor_tests/
+│   ├── motor_tests/
+│   └── integration_tests/
+│
+├── README.md
+├── LICENSE
+└── pyproject.toml
