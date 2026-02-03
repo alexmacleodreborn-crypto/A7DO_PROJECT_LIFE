@@ -8,7 +8,7 @@ class Predictor:
         self.world = world
         self.memory = memory
 
-    def predict(self, horizon: int = 1):
+    def predict(self, horizon: int = 2):
         """
         Predicts strain at t + horizon using recent trend.
         """

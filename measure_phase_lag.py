@@ -14,7 +14,7 @@ LEDGER_PATH = Path(
     "13_EVIDENCE_AND_SANDYS_LAW_LEDGER/datasets/evidence.jsonl"
 )
 
-FORECAST_HORIZON = 1  # must match predictor horizon
+FORECAST_HORIZON = 2  # must match predictor horizon
 
 
 # --------------------------------------------------
