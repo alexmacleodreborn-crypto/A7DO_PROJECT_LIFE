@@ -1,6 +1,6 @@
 """
 A7DO Minimal Runnable Life Loop (MRLL)
-TEST-LOCKED CORE + MEMORY PRUNING
+TEST-LOCKED CORE + WORLD TIME INTEGRATION
 """
 
 import time
@@ -25,6 +25,12 @@ def load_module(name: str, relative_path: str):
 self_id_mod = load_module("self_id", "00_CORE_EXISTENCE/identity/self_id.py")
 clock_mod = load_module("clock", "00_CORE_EXISTENCE/heartbeat/clock.py")
 pulse_mod = load_module("pulse", "00_CORE_EXISTENCE/heartbeat/pulse.py")
+
+# --------------------------------------------------
+# WORLD
+# --------------------------------------------------
+world_time_mod = load_module("world_time", "09_WORLD_MODEL/time.py")
+world_state_mod = load_module("world_state", "09_WORLD_MODEL/world.py")
 
 # --------------------------------------------------
 # PHYSICS
@@ -52,10 +58,9 @@ motor_mod = load_module("motor", "03_BODY_SYSTEM/motor_control/gross_motor.py")
 proprio_mod = load_module("proprio", "04_SENSORY_SYSTEM/proprioception/body_orientation.py")
 
 # --------------------------------------------------
-# MEMORY + SALIENCE
+# MEMORY
 # --------------------------------------------------
 episodic_mod = load_module("episodic", "07_MEMORY_SYSTEM/episodic.py")
-salience_mod = load_module("salience", "06_LIMBIC_AND_VALUE_SYSTEM/salience.py")
 
 # --------------------------------------------------
 # ALIASES
@@ -63,6 +68,9 @@ salience_mod = load_module("salience", "06_LIMBIC_AND_VALUE_SYSTEM/salience.py")
 SelfIdentity = self_id_mod.SelfIdentity
 SystemClock = clock_mod.SystemClock
 Pulse = pulse_mod.Pulse
+
+WorldTime = world_time_mod.WorldTime
+WorldState = world_state_mod.WorldState
 
 PhysicsGate = physics_mod.PhysicsGate
 
@@ -78,18 +86,25 @@ GrossMotor = motor_mod.GrossMotor
 BodyOrientationSense = proprio_mod.BodyOrientationSense
 
 EpisodicMemory = episodic_mod.EpisodicMemory
-SalienceMap = salience_mod.SalienceMap
 
 
 class LifeLoop:
+    """
+    The ONLY place A7DO experiences the world.
+    """
+
     def __init__(self):
         # Core
         self.identity = SelfIdentity()
-        self.clock = SystemClock()      # real-world elapsed time
+        self.clock = SystemClock()     # real-world elapsed time
         self.pulse = Pulse()
 
-        # ✅ INTERNAL (A7DO) TIME
+        # A7DO internal (experiential) time
         self.internal_time = 0
+
+        # World (independent of cognition)
+        self.world_time = WorldTime()
+        self.world = WorldState()
 
         # Physics / metabolism
         self.physics = PhysicsGate()
@@ -106,45 +121,44 @@ class LifeLoop:
         self.motor = GrossMotor()
         self.proprio = BodyOrientationSense()
 
-        # Memory + salience
+        # Memory
         self.memory = EpisodicMemory()
-        self.salience = SalienceMap()
 
     # --------------------------------------------------
-    # REQUIRED BY TESTS
-    # --------------------------------------------------
-    def record_memory(self, event: dict, salience: float, cost: float = 0.2):
-        self.physics.allow(cost, self.energy.level())
-        self.energy.spend(cost)
-
-        record = self.memory.record(event)
-        memory_id = f"{event['type']}_{record['time']}"
-        self.salience.set(memory_id, salience)
-
-        return record
-
-    def memory_recent(self, n: int = 5):
-        return self.memory.recent(n)
-
-    # --------------------------------------------------
-    # LIFE TICK (INTENTIONAL EXPERIENCE)
+    # LIFE TICK — INTENTIONAL EXPERIENCE
     # --------------------------------------------------
     def tick(self):
         if not self.pulse.is_alive():
             return
 
         try:
-            # 🔒 INTENTIONAL TIME BOUNDARY
+            # ------------------------------------------
+            # INTENTIONAL TIME BOUNDARY
+            # ------------------------------------------
             self.internal_time += 1
             real_time = self.clock.now()
 
-            # Base metabolism
+            # World advances independently
+            self.world_time.tick(delta=1.0)
+
+            # A7DO samples the world HERE (and only here)
+            self.world.update(
+                energy=self.energy.level(),
+                strain=self.overload.strain,
+                last_action=getattr(self.motor, "last_action", None),
+                time=self.world_time.t,
+            )
+
+            # ------------------------------------------
+            # BASE METABOLISM
+            # ------------------------------------------
             self.physics.allow(1.0, self.energy.level())
             self.energy.spend(1.0)
 
-            # Withdrawal logic (test-driven)
+            # ------------------------------------------
+            # REFLEX / WITHDRAWAL
+            # ------------------------------------------
             if self.overload.strain > 0.5:
-                # Reflex
                 try:
                     self.physics.allow(0.5, self.energy.level())
                     self.energy.spend(0.5)
@@ -152,7 +166,6 @@ class LifeLoop:
                 except Exception:
                     pass
 
-                # Motor
                 try:
                     self.physics.allow(0.7, self.energy.level())
                     self.energy.spend(0.7)
@@ -160,21 +173,24 @@ class LifeLoop:
                 except Exception:
                     action = None
 
-                # Proprioception
                 try:
                     body_state = self.proprio.sense({"action": action})
                 except Exception:
                     body_state = None
 
-                # ✅ EPISODIC MEMORY WITH DUAL TIME
+                # ------------------------------------------
+                # MEMORY: EXPERIENCED WORLD
+                # ------------------------------------------
                 self.memory.record({
                     "type": "pain_withdrawal",
                     "body_state": body_state,
+                    "world": self.world.snapshot(),
                     "time_internal": self.internal_time,
                     "time_real": real_time,
+                    "time_world": self.world_time.t,
                 })
 
-            # Apply load AFTER withdrawal check
+            # Load accumulates AFTER action
             self.overload.apply_load(0.1)
 
             # Memory decay / pruning
