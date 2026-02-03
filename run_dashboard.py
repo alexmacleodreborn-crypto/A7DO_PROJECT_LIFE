@@ -97,6 +97,39 @@ def build_system():
         {"type": "pain_withdrawal", "strain": 0.9},
         salience=0.8
     )
+
     world.update(
         energy=4.0,
-        strain
+        strain=0.7,
+        last_action="withdraw_limb"
+    )
+
+    # Initial prediction → evidence
+    prediction = predictor.predict()
+    logger.observe_prediction(
+        world_snapshot=world.snapshot(),
+        prediction=prediction
+    )
+    logger.observe_outcome(
+        world_snapshot=world.snapshot(),
+        confidence=prediction.get("confidence", 0.0),
+        notes="initial dashboard observation"
+    )
+
+    snapshot = IntrospectionSnapshot(
+        world,
+        memory,
+        attention,
+        predictor,
+        council
+    )
+
+    return snapshot, ledger
+
+# --------------------------------------------------
+# ENTRY POINT
+# --------------------------------------------------
+if __name__ == "__main__":
+    snapshot, ledger = build_system()
+    WebDashboard(snapshot, ledger=ledger).run()
+
