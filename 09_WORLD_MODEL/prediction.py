@@ -1,30 +1,31 @@
 """
 A7DO Predictor
 Forecasts future world state using history + present
-with controlled curvature (second-derivative) correction.
+with softened velocity scaling and controlled curvature.
 """
+
+import math
 
 class Predictor:
     def __init__(self, world, memory):
         self.world = world
         self.memory = memory
 
-        # Curvature gain (stability parameter)
-        # 0.0 = first-order only
-        # ~0.15–0.3 = stable second-order correction
+        # Curvature gain (kept modest)
         self.KAPPA = 0.15
 
     def predict(self, horizon: int = 2):
         """
-        Predicts strain at t + horizon using
-        velocity + controlled curvature correction.
+        Predicts strain at t + horizon using:
+        - softened velocity contribution
+        - second-derivative curvature correction
         """
 
         # Current state
         current = self.world.snapshot()
         current_strain = current.get("strain", 0.0)
 
-        # Get recent memory (need at least 3 points for curvature)
+        # Recent memory
         recent = self.memory.recent(3)
 
         predicted = current_strain
@@ -36,14 +37,18 @@ class Predictor:
 
                 # First derivative (velocity)
                 velocity = s1 - s0
-                predicted = current_strain + horizon * velocity
 
-                # Second derivative (curvature / acceleration)
+                # --- KEY CHANGE ---
+                # Softened velocity scaling (nonlinear in horizon)
+                velocity_scale = math.sqrt(horizon)
+
+                predicted = current_strain + velocity_scale * velocity
+
+                # Second derivative (curvature)
                 if len(recent) >= 3:
                     s_1 = recent[-3]["event"]["strain"]
                     acceleration = s1 - 2 * s0 + s_1
 
-                    # Controlled curvature correction
                     predicted -= (
                         self.KAPPA * (horizon ** 2) * acceleration
                     )
@@ -51,7 +56,7 @@ class Predictor:
             except Exception:
                 predicted = current_strain
 
-        # Clamp to valid physical range
+        # Clamp to physical bounds
         predicted = max(0.0, min(1.0, predicted))
 
         # Conservative base confidence (calibrated elsewhere)
@@ -62,4 +67,5 @@ class Predictor:
             "confidence": confidence,
             "horizon": horizon,
             "kappa": self.KAPPA,
+            "velocity_scale": velocity_scale if len(recent) >= 2 else None,
         }
