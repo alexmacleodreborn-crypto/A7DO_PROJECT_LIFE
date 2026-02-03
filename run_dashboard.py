@@ -49,7 +49,7 @@ append_evidence = evidence_mod.append_evidence
 # SESSION STATE
 # --------------------------------------------------
 if "life" not in st.session_state:
-    st.session_state.life = LifeLoop(WorldTime(), WorldState())
+    st.session_state.life = LifeLoop()
 
 if "predictor" not in st.session_state:
     st.session_state.predictor = Predictor(horizon=2)

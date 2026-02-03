@@ -9,7 +9,7 @@ class Fatigue:
         self.level = 0.0
 
     def add(self, amount: float):
-        self.level += amount
+        self.level = min(1.0, self.level + amount)
 
     def recover(self, amount: float):
         self.level = max(0.0, self.level - amount)
