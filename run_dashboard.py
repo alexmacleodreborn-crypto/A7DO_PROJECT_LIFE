@@ -1,12 +1,13 @@
 """
 A7DO — Live Introspection Dashboard
-Manual Tick Control (Authoritative Time Boundary)
+Organism + Prediction + Evidence + Visuals
 """
 
 import streamlit as st
 import time
 import importlib.util
 from pathlib import Path
+import json
 
 # --------------------------------------------------
 # PROJECT ROOT
@@ -15,90 +16,94 @@ ROOT = Path(__file__).resolve().parent
 
 def load_module(name: str, relative_path: str):
     path = ROOT / relative_path
+    if not path.exists():
+        raise FileNotFoundError(path)
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 # --------------------------------------------------
-# LOAD WORLD
+# LOAD CORE
 # --------------------------------------------------
-world_time_mod = load_module("world_time", "09_WORLD_MODEL/time.py")
-world_state_mod = load_module("world_state", "09_WORLD_MODEL/world_state.py")
-
-WorldTime = world_time_mod.WorldTime
-WorldState = world_state_mod.WorldState
-
-# --------------------------------------------------
-# LOAD LIFE LOOP
-# --------------------------------------------------
-life_loop_mod = load_module(
+life_mod = load_module(
     "life_loop",
     "00_CORE_EXISTENCE/bootstrap/life_loop.py"
 )
-LifeLoop = life_loop_mod.LifeLoop
+LifeLoop = life_mod.LifeLoop
+
+world_time_mod = load_module("world_time", "09_WORLD_MODEL/time.py")
+world_state_mod = load_module("world_state", "09_WORLD_MODEL/world_state.py")
+prediction_mod = load_module("prediction", "09_WORLD_MODEL/prediction.py")
+evidence_mod = load_module(
+    "evidence",
+    "13_EVIDENCE_AND_SANDYS_LAW_LEDGER/correlation.py"
+)
+
+WorldTime = world_time_mod.WorldTime
+WorldState = world_state_mod.WorldState
+Predictor = prediction_mod.Predictor
+append_evidence = evidence_mod.append_evidence
 
 # --------------------------------------------------
 # SESSION STATE
 # --------------------------------------------------
 if "life" not in st.session_state:
-    world_time = WorldTime()
-    world_state = WorldState()
-    st.session_state.life = LifeLoop(world_time, world_state)
+    st.session_state.life = LifeLoop(WorldTime(), WorldState())
 
-if "run_ticks_remaining" not in st.session_state:
-    st.session_state.run_ticks_remaining = 0
+if "predictor" not in st.session_state:
+    st.session_state.predictor = Predictor(horizon=2)
 
 life = st.session_state.life
+predictor = st.session_state.predictor
 
 # --------------------------------------------------
-# SIDEBAR CONTROLS
+# CONTROLS
 # --------------------------------------------------
 st.sidebar.title("🧠 A7DO Control")
 
-if st.sidebar.button("🔘 Tick (1)"):
+if st.sidebar.button("🔘 Tick"):
     life.tick()
 
-run_n = st.sidebar.number_input(
-    "Run N ticks",
-    min_value=1,
-    max_value=100,
-    value=5,
-    step=1
-)
-
-if st.sidebar.button("▶️ Run N"):
-    st.session_state.run_ticks_remaining = run_n
-
-if st.sidebar.button("⏸ Pause"):
-    st.session_state.run_ticks_remaining = 0
-
-# --------------------------------------------------
-# RUN LOOP
-# --------------------------------------------------
-if st.session_state.run_ticks_remaining > 0:
+if st.sidebar.button("▶️ Tick + Predict + Log"):
     life.tick()
-    st.session_state.run_ticks_remaining -= 1
-    time.sleep(0.05)
-    st.rerun()
+    prediction = predictor.predict(
+        life.world.snapshot(),
+        life.memory.recent(5)
+    )
+    append_evidence(life.world.snapshot(), prediction)
 
 # --------------------------------------------------
-# DASHBOARD DISPLAY
+# DASHBOARD
 # --------------------------------------------------
 st.title("🧠 A7DO — Live Introspection Dashboard")
 
 st.subheader("🌍 World / Body State")
-st.json({
-    "energy": life.energy.level(),
-    "strain": life.overload.strain,
-    "last_action": getattr(life.motor, "last_action", None),
-    "time_internal": life.internal_time,
-    "time_real": life.clock.now(),
-    "time_world": life.world_time.t,
-})
+st.json(life.world.snapshot())
+
+st.subheader("🔮 Prediction")
+st.json(predictor.last_prediction)
 
 st.subheader("🧠 Recent Memory")
 st.json(life.memory.recent(5))
+
+# --------------------------------------------------
+# EVIDENCE TABLE
+# --------------------------------------------------
+st.subheader("📊 Evidence (Recent)")
+
+ledger_path = Path(
+    "13_EVIDENCE_AND_SANDYS_LAW_LEDGER/datasets/evidence.jsonl"
+)
+
+rows = []
+if ledger_path.exists():
+    with open(ledger_path) as f:
+        for line in f.readlines()[-10:]:
+            rows.append(json.loads(line))
+
+if rows:
+    st.dataframe(rows)
 
 st.subheader("❤️ Pulse")
 st.write("Alive:", life.pulse.is_alive())

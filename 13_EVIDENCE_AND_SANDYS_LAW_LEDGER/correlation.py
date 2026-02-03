@@ -1,23 +1,25 @@
-# correlations.py
+import json
+from pathlib import Path
+from time import time
 
-class CorrelationLedger:
-    """
-    Tracks correlations between Sandy’s Law predictions
-    and empirical observations.
-    """
+LEDGER = Path(
+    "13_EVIDENCE_AND_SANDYS_LAW_LEDGER/datasets/evidence.jsonl"
+)
 
-    def __init__(self):
-        self.entries = []
+def append_evidence(world, prediction):
+    record = {
+        "time": time(),
+        "prediction": prediction,
+        "outcome": {
+            "strain": world["strain"],
+            "energy": world["energy"],
+        },
+        "error": abs(prediction["expected_strain"] - world["strain"]),
+        "confidence": prediction["confidence"],
+    }
 
-    def add(self, claim: str, dataset: str, score: float):
-        """
-        score ∈ [-1, 1]
-        """
-        self.entries.append({
-            "claim": claim,
-            "dataset": dataset,
-            "score": score
-        })
+    LEDGER.parent.mkdir(parents=True, exist_ok=True)
+    with open(LEDGER, "a") as f:
+        f.write(json.dumps(record) + "\n")
 
-    def summary(self):
-        return list(self.entries)
+    return record

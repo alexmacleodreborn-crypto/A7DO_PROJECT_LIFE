@@ -1,6 +1,6 @@
 """
 A7DO Minimal Runnable Life Loop (MRLL)
-TEST-LOCKED CORE + WORLD INTEGRATION
+TEST-LOCKED CORE + WORLD + TRUE HOMEOSTASIS
 """
 
 import time
@@ -76,19 +76,19 @@ ReflexArc = reflex_mod.ReflexArc
 GrossMotor = motor_mod.GrossMotor
 BodyOrientationSense = proprio_mod.BodyOrientationSense
 
-EpisodicMemory = episododic_mod = episodic_mod.EpisodicMemory
+EpisodicMemory = episodic_mod.EpisodicMemory
 
 
 class LifeLoop:
     """
-    The ONLY place A7DO experiences the world.
-    World dependencies are injected (no nested loaders).
+    Authoritative embodied life loop.
+    All experience, time, energy, and survival happen here.
     """
 
     def __init__(self, world_time, world_state):
         # Core
         self.identity = SelfIdentity()
-        self.clock = SystemClock()      # real-world elapsed time
+        self.clock = SystemClock()
         self.pulse = Pulse()
 
         # Internal experiential time
@@ -116,6 +116,9 @@ class LifeLoop:
         # Memory
         self.memory = EpisodicMemory()
 
+        # Rest / sleep state
+        self.is_resting = False
+
     # --------------------------------------------------
     # LIFE TICK — INTENTIONAL EXPERIENCE
     # --------------------------------------------------
@@ -124,26 +127,25 @@ class LifeLoop:
             return
 
         try:
-            # ---- INTENTIONAL TIME BOUNDARY ----
+            # ------------------------------------------
+            # TIME BOUNDARY
+            # ------------------------------------------
             self.internal_time += 1
             real_time = self.clock.now()
 
             # World evolves independently
             self.world_time.tick(delta=1.0)
 
-            # A7DO samples world here
-            self.world.update(
-                energy=self.energy.level(),
-                strain=self.overload.strain,
-                last_action=getattr(self.motor, "last_action", None),
-                time=self.world_time.t,
-            )
-
-            # Base metabolism
+            # ------------------------------------------
+            # BASE METABOLISM (COST OF BEING ALIVE)
+            # ------------------------------------------
             self.physics.allow(1.0, self.energy.level())
             self.energy.spend(1.0)
 
-            # Reflex / withdrawal
+            # ------------------------------------------
+            # PAIN / WITHDRAWAL
+            # ------------------------------------------
+            action = None
             if self.overload.strain > 0.5:
                 try:
                     self.physics.allow(0.5, self.energy.level())
@@ -164,20 +166,59 @@ class LifeLoop:
                 except Exception:
                     body_state = None
 
-                # Record experienced world
                 self.memory.record({
                     "type": "pain_withdrawal",
                     "body_state": body_state,
-                    "world": self.world.snapshot(),
                     "time_internal": self.internal_time,
                     "time_real": real_time,
                     "time_world": self.world_time.t,
                 })
 
-            # Load accumulates after action
+            # ------------------------------------------
+            # LOAD ACCUMULATION
+            # ------------------------------------------
             self.overload.apply_load(0.1)
 
-            # Memory decay
+            # ------------------------------------------
+            # REST / SLEEP PHYSIOLOGY (KEY FIX)
+            # ------------------------------------------
+            if (
+                self.overload.strain < 0.3
+                and self.energy.level() < self.energy.capacity
+                and action is None
+            ):
+                self.is_resting = True
+            else:
+                self.is_resting = False
+
+            if self.is_resting:
+                # Nutritional intake during rest
+                self.recovery.rest(1.2)
+
+                # Physiological calming
+                self.overload.recover(0.15)
+
+                # Optional memory of rest
+                self.memory.record({
+                    "type": "rest",
+                    "energy": self.energy.level(),
+                    "strain": self.overload.strain,
+                    "time_internal": self.internal_time,
+                })
+
+            # ------------------------------------------
+            # WORLD SAMPLING (EXPERIENCED WORLD)
+            # ------------------------------------------
+            self.world.update(
+                energy=self.energy.level(),
+                strain=self.overload.strain,
+                last_action=action,
+                time=self.world_time.t,
+            )
+
+            # ------------------------------------------
+            # MEMORY MAINTENANCE
+            # ------------------------------------------
             self.memory.tick()
 
         except Exception as e:
