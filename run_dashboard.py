@@ -1,6 +1,6 @@
 """
 A7DO Web Dashboard Runner
-Read-only observability + evidence wiring
+Read-only observability + evidence + confidence calibration
 """
 
 import importlib.util
@@ -33,6 +33,10 @@ snapshot_mod = load(
 logging_mod = load(
     ROOT / "12_INTERFACE_AND_OBSERVABILITY/logging.py",
     "logging"
+)
+calib_mod = load(
+    ROOT / "12_INTERFACE_AND_OBSERVABILITY/calibration.py",
+    "calibration"
 )
 
 # World + Cognition
@@ -70,6 +74,7 @@ WebDashboard = visual_mod.WebDashboard
 IntrospectionSnapshot = snapshot_mod.IntrospectionSnapshot
 EvidenceLogger = logging_mod.EvidenceLogger
 EvidenceLedger = ledger_mod.EvidenceLedger
+ConfidenceCalibrator = calib_mod.ConfidenceCalibrator
 
 WorldState = world_mod.WorldState
 EpisodicMemory = memory_mod.EpisodicMemory
@@ -83,14 +88,15 @@ Council = council_mod.Council
 def build_system():
     # Core state
     world = WorldState()
-    memory = EpisodicMemory(capacity=20)
+    memory = EpisodicMemory(capacity=50)
     attention = AttentionSystem(memory, focus_size=5)
     predictor = Predictor(world, memory)
     council = Council(world, memory, predictor, attention)
 
-    # Evidence
+    # Evidence + calibration
     ledger = EvidenceLedger()
     logger = EvidenceLogger(ledger)
+    calibrator = ConfidenceCalibrator(ledger)
 
     # Seed initial experience (for visibility)
     memory.record(
@@ -124,12 +130,15 @@ def build_system():
         council
     )
 
-    return snapshot, ledger
+    return snapshot, ledger, calibrator
 
 # --------------------------------------------------
 # ENTRY POINT
 # --------------------------------------------------
 if __name__ == "__main__":
-    snapshot, ledger = build_system()
-    WebDashboard(snapshot, ledger=ledger).run()
-
+    snapshot, ledger, calibrator = build_system()
+    WebDashboard(
+        snapshot,
+        ledger=ledger,
+        calibrator=calibrator
+    ).run()

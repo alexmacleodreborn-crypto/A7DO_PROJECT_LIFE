@@ -55,7 +55,7 @@ def run_simulation(steps=50, delay=0.2):
         )
 
         # Simulate world drift
-        strain += random.uniform(-0.1, 0.15)
+        strain += random.uniform(-0.02, 0.03)
         strain = max(0.0, min(1.0, strain))
         world.update(strain=strain)
 
