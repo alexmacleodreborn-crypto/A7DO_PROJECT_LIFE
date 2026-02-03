@@ -85,8 +85,11 @@ class LifeLoop:
     def __init__(self):
         # Core
         self.identity = SelfIdentity()
-        self.clock = SystemClock()
+        self.clock = SystemClock()      # real-world elapsed time
         self.pulse = Pulse()
+
+        # ✅ INTERNAL (A7DO) TIME
+        self.internal_time = 0
 
         # Physics / metabolism
         self.physics = PhysicsGate()
@@ -124,13 +127,17 @@ class LifeLoop:
         return self.memory.recent(n)
 
     # --------------------------------------------------
-    # LIFE TICK
+    # LIFE TICK (INTENTIONAL EXPERIENCE)
     # --------------------------------------------------
     def tick(self):
         if not self.pulse.is_alive():
             return
 
         try:
+            # 🔒 INTENTIONAL TIME BOUNDARY
+            self.internal_time += 1
+            real_time = self.clock.now()
+
             # Base metabolism
             self.physics.allow(1.0, self.energy.level())
             self.energy.spend(1.0)
@@ -159,16 +166,18 @@ class LifeLoop:
                 except Exception:
                     body_state = None
 
-                # REQUIRED episodic memory
+                # ✅ EPISODIC MEMORY WITH DUAL TIME
                 self.memory.record({
                     "type": "pain_withdrawal",
-                    "body_state": body_state
+                    "body_state": body_state,
+                    "time_internal": self.internal_time,
+                    "time_real": real_time,
                 })
 
             # Apply load AFTER withdrawal check
             self.overload.apply_load(0.1)
 
-            # ✅ MEMORY DECAY / PRUNING (CORRECT PLACE)
+            # Memory decay / pruning
             self.memory.tick()
 
         except Exception as e:

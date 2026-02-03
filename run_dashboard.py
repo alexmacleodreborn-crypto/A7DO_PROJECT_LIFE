@@ -1,8 +1,10 @@
 """
-A7DO Web Dashboard Runner
-Read-only observability + evidence + confidence calibration
+A7DO — Live Introspection Dashboard
+Manual Tick Control (Authoritative Time Boundary)
 """
 
+import streamlit as st
+import time
 import importlib.util
 from pathlib import Path
 
@@ -11,134 +13,100 @@ from pathlib import Path
 # --------------------------------------------------
 ROOT = Path(__file__).resolve().parent
 
-def load(path: Path, name: str):
+def load_module(name: str, relative_path: str):
+    path = ROOT / relative_path
     spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 # --------------------------------------------------
-# LOAD MODULES (NUMBERED FOLDERS SAFE)
+# LOAD CORE LIFE LOOP
 # --------------------------------------------------
-
-# Interface / Observability
-visual_mod = load(
-    ROOT / "12_INTERFACE_AND_OBSERVABILITY/visualisation.py",
-    "visualisation"
+life_loop_mod = load_module(
+    "life_loop",
+    "00_CORE_EXISTENCE/bootstrap/life_loop.py"
 )
-snapshot_mod = load(
-    ROOT / "12_INTERFACE_AND_OBSERVABILITY/snapshot.py",
-    "snapshot"
-)
-logging_mod = load(
-    ROOT / "12_INTERFACE_AND_OBSERVABILITY/logging.py",
-    "logging"
-)
-calib_mod = load(
-    ROOT / "12_INTERFACE_AND_OBSERVABILITY/calibration.py",
-    "calibration"
-)
-
-# World + Cognition
-world_mod = load(
-    ROOT / "09_WORLD_MODEL/world_state.py",
-    "world"
-)
-prediction_mod = load(
-    ROOT / "09_WORLD_MODEL/prediction.py",
-    "prediction"
-)
-memory_mod = load(
-    ROOT / "07_MEMORY_SYSTEM/episodic.py",
-    "memory"
-)
-attention_mod = load(
-    ROOT / "06_LIMBIC_AND_VALUE_SYSTEM/attention.py",
-    "attention"
-)
-council_mod = load(
-    ROOT / "10_MULTI_AGENT_COUNCIL/council.py",
-    "council"
-)
-
-# Evidence Ledger
-ledger_mod = load(
-    ROOT / "13_EVIDENCE_AND_SANDYS_LAW_LEDGER/evidence_ledger.py",
-    "ledger"
-)
+LifeLoop = life_loop_mod.LifeLoop
 
 # --------------------------------------------------
-# ALIASES
+# LOAD PREDICTOR (SAFE FOR NUMBERED FOLDER)
 # --------------------------------------------------
-WebDashboard = visual_mod.WebDashboard
-IntrospectionSnapshot = snapshot_mod.IntrospectionSnapshot
-EvidenceLogger = logging_mod.EvidenceLogger
-EvidenceLedger = ledger_mod.EvidenceLedger
-ConfidenceCalibrator = calib_mod.ConfidenceCalibrator
-
-WorldState = world_mod.WorldState
-EpisodicMemory = memory_mod.EpisodicMemory
-AttentionSystem = attention_mod.AttentionSystem
+prediction_mod = load_module(
+    "prediction",
+    "09_WORLD_MODEL/prediction.py"
+)
 Predictor = prediction_mod.Predictor
-Council = council_mod.Council
 
 # --------------------------------------------------
-# BUILD SYSTEM (OBSERVATION ONLY)
+# SESSION STATE
 # --------------------------------------------------
-def build_system():
-    # Core state
-    world = WorldState()
-    memory = EpisodicMemory(capacity=50)
-    attention = AttentionSystem(memory, focus_size=5)
-    predictor = Predictor(world, memory)
-    council = Council(world, memory, predictor, attention)
+if "life" not in st.session_state:
+    st.session_state.life = LifeLoop()
 
-    # Evidence + calibration
-    ledger = EvidenceLedger()
-    logger = EvidenceLogger(ledger)
-    calibrator = ConfidenceCalibrator(ledger)
+if "run_ticks_remaining" not in st.session_state:
+    st.session_state.run_ticks_remaining = 0
 
-    # Seed initial experience (for visibility)
-    memory.record(
-        {"type": "pain_withdrawal", "strain": 0.9},
-        salience=0.8
-    )
-
-    world.update(
-        energy=4.0,
-        strain=0.7,
-        last_action="withdraw_limb"
-    )
-
-    # Initial prediction → evidence
-    prediction = predictor.predict()
-    logger.observe_prediction(
-        world_snapshot=world.snapshot(),
-        prediction=prediction
-    )
-    logger.observe_outcome(
-        world_snapshot=world.snapshot(),
-        confidence=prediction.get("confidence", 0.0),
-        notes="initial dashboard observation"
-    )
-
-    snapshot = IntrospectionSnapshot(
-        world,
-        memory,
-        attention,
-        predictor,
-        council
-    )
-
-    return snapshot, ledger, calibrator
+life = st.session_state.life
 
 # --------------------------------------------------
-# ENTRY POINT
+# SIDEBAR CONTROLS
 # --------------------------------------------------
-if __name__ == "__main__":
-    snapshot, ledger, calibrator = build_system()
-    WebDashboard(
-        snapshot,
-        ledger=ledger,
-        calibrator=calibrator
-    ).run()
+st.sidebar.title("🧠 A7DO Control")
+
+if st.sidebar.button("🔘 Tick (1)"):
+    life.tick()
+
+run_n = st.sidebar.number_input(
+    "Run N ticks",
+    min_value=1,
+    max_value=100,
+    value=5,
+    step=1
+)
+
+if st.sidebar.button("▶️ Run N"):
+    st.session_state.run_ticks_remaining = run_n
+
+if st.sidebar.button("⏸ Pause"):
+    st.session_state.run_ticks_remaining = 0
+
+# --------------------------------------------------
+# RUN LOOP (CONTROLLED)
+# --------------------------------------------------
+if st.session_state.run_ticks_remaining > 0:
+    life.tick()
+    st.session_state.run_ticks_remaining -= 1
+    time.sleep(0.05)
+    st.experimental_rerun()
+
+# --------------------------------------------------
+# DASHBOARD DISPLAY
+# --------------------------------------------------
+st.title("🧠 A7DO — Live Introspection Dashboard")
+
+st.subheader("🌍 World / Body State")
+st.json({
+    "energy": life.energy.level(),
+    "strain": life.overload.strain,
+    "last_action": getattr(life.motor, "last_action", None),
+    "time_internal": life.internal_time,
+    "time_real": life.clock.now(),
+})
+
+st.subheader("🔮 Prediction")
+try:
+    predictor = Predictor(
+        world=None,
+        memory=life.memory
+    )
+    prediction = predictor.predict(horizon=2)
+    st.json(prediction)
+except Exception as e:
+    st.warning(f"Prediction unavailable: {e}")
+
+st.subheader("🧠 Recent Memory")
+st.json(life.memory.recent(5))
+
+st.subheader("❤️ Pulse")
+st.write("Alive:", life.pulse.is_alive())
