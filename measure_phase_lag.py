@@ -1,6 +1,6 @@
 """
-Measure phase lag between predicted and observed strain
-accounting for forecast horizon.
+Measure phase lag between predicted and observed strain.
+Lag is reported relative to the forecast horizon.
 """
 
 import json
@@ -14,7 +14,7 @@ LEDGER_PATH = Path(
     "13_EVIDENCE_AND_SANDYS_LAW_LEDGER/datasets/evidence.jsonl"
 )
 
-FORECAST_HORIZON = 2  # must match predictor horizon
+FORECAST_HORIZON = 2
 
 
 # --------------------------------------------------
@@ -43,31 +43,26 @@ def load_series():
 
 
 # --------------------------------------------------
-# LAG COMPUTATION (HORIZON-AWARE)
+# TRUE LAG COMPUTATION
 # --------------------------------------------------
-def compute_lag(expected, observed, horizon=1):
+def compute_true_lag(expected, observed, horizon):
     """
-    Computes lag in timesteps.
-    Positive lag means prediction lags reality.
-    Negative lag means prediction leads reality.
+    Measures true temporal lag.
+    Positive = prediction lags reality
+    Negative = prediction leads reality
     """
 
-    if len(expected) <= horizon:
-        return None
+    n = min(len(expected), len(observed))
+    expected = expected[:n] - expected.mean()
+    observed = observed[:n] - observed.mean()
 
-    # Align prediction(t+h) with observation(t+h)
-    expected_aligned = expected[:-horizon]
-    observed_aligned = observed[horizon:]
+    corr = np.correlate(observed, expected, mode="full")
+    raw_lag = corr.argmax() - (n - 1)
 
-    # Demean
-    expected_aligned = expected_aligned - expected_aligned.mean()
-    observed_aligned = observed_aligned - observed_aligned.mean()
+    # Adjust for forecast horizon
+    true_lag = raw_lag - horizon
 
-    # Cross-correlation
-    corr = np.correlate(observed_aligned, expected_aligned, mode="full")
-    lag_index = corr.argmax() - (len(expected_aligned) - 1)
-
-    return lag_index
+    return raw_lag, true_lag
 
 
 # --------------------------------------------------
@@ -76,16 +71,17 @@ def compute_lag(expected, observed, horizon=1):
 if __name__ == "__main__":
     expected, observed = load_series()
 
-    if expected is None or len(expected) < 10:
+    if expected is None or len(expected) < 20:
         print("Not enough data to measure lag.")
     else:
-        lag = compute_lag(
+        raw_lag, true_lag = compute_true_lag(
             expected,
             observed,
-            horizon=FORECAST_HORIZON,
+            FORECAST_HORIZON,
         )
 
         print("=" * 60)
-        print(f"Forecast horizon: {FORECAST_HORIZON} step(s)")
-        print(f"Measured phase lag: {lag} timesteps")
+        print(f"Forecast horizon: {FORECAST_HORIZON}")
+        print(f"Raw correlation lag: {raw_lag}")
+        print(f"True lag vs horizon: {true_lag}")
         print("=" * 60)
