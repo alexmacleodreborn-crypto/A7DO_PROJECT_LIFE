@@ -1,21 +1,50 @@
-# logging.py
+"""
+Observability logging for A7DO.
+Wires prediction → outcome into the Evidence Ledger.
+Read-only with respect to cognition.
+"""
 
-from datetime import datetime
+from copy import deepcopy
 
-class EventLogger:
+
+class EvidenceLogger:
     """
-    Records observable system events.
+    Observes system state and records evidence events.
     """
 
-    def __init__(self):
-        self.events = []
+    def __init__(self, ledger):
+        self.ledger = ledger
+        self._last_prediction = None
+        self._last_world = None
 
-    def log(self, category: str, message: str):
-        self.events.append({
-            "time": datetime.utcnow().isoformat(),
-            "category": category,
-            "message": message
-        })
+    def observe_prediction(self, world_snapshot: dict, prediction: dict):
+        """
+        Capture prediction and world state at time of prediction.
+        """
+        self._last_world = deepcopy(world_snapshot)
+        self._last_prediction = deepcopy(prediction)
 
-    def recent(self, n: int = 20):
-        return self.events[-n:]
+    def observe_outcome(
+        self,
+        world_snapshot: dict,
+        confidence: float = 0.0,
+        notes: str = "",
+    ):
+        """
+        Compare latest outcome to last prediction and record evidence.
+        """
+        if self._last_prediction is None or self._last_world is None:
+            return None  # Nothing to record yet
+
+        outcome = {
+            "strain": world_snapshot.get("strain"),
+            "energy": world_snapshot.get("energy"),
+        }
+
+        return self.ledger.record(
+            world=self._last_world,
+            prediction=self._last_prediction,
+            outcome=outcome,
+            confidence=confidence,
+            notes=notes,
+        )

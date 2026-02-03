@@ -1,15 +1,34 @@
-# dashboard.py
-
 class Dashboard:
     """
-    Aggregates system state for display.
+    Read-only dashboard for introspection.
+    Renders snapshot data for human inspection.
     """
 
-    def __init__(self):
-        self.panels = {}
+    def __init__(self, snapshot):
+        self.snapshot = snapshot
 
-    def update_panel(self, name: str, data: dict):
-        self.panels[name] = data
+    def render_text(self) -> str:
+        view = self.snapshot.capture()
 
-    def render(self) -> dict:
-        return self.panels
+        lines = []
+        lines.append("=== WORLD ===")
+        for k, v in view.get("world", {}).items():
+            lines.append(f"{k}: {v}")
+
+        lines.append("\n=== MEMORY (recent) ===")
+        for e in view.get("memory", []):
+            lines.append(str(e))
+
+        lines.append("\n=== ATTENTION ===")
+        for e in view.get("attention", []):
+            lines.append(str(e))
+
+        lines.append("\n=== PREDICTION ===")
+        for k, v in view.get("prediction", {}).items():
+            lines.append(f"{k}: {v}")
+
+        lines.append("\n=== COUNCIL ===")
+        for k, v in view.get("council", {}).items():
+            lines.append(f"{k}: {v}")
+
+        return "\n".join(lines)

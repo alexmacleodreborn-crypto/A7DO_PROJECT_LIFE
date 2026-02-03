@@ -1,0 +1,80 @@
+import importlib.util
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def load(path, name):
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def load_modules():
+    snap = load(
+        ROOT / "12_INTERFACE_AND_OBSERVABILITY/snapshot.py",
+        "snapshot",
+    )
+    world = load(
+        ROOT / "09_WORLD_MODEL/world_state.py",
+        "world",
+    )
+    pred = load(
+        ROOT / "09_WORLD_MODEL/prediction.py",
+        "prediction",
+    )
+    mem = load(
+        ROOT / "07_MEMORY_SYSTEM/episodic.py",
+        "memory",
+    )
+    att = load(
+        ROOT / "06_LIMBIC_AND_VALUE_SYSTEM/attention.py",
+        "attention",
+    )
+    council = load(
+        ROOT / "10_MULTI_AGENT_COUNCIL/council.py",
+        "council",
+    )
+
+    return (
+        snap.IntrospectionSnapshot,
+        world.WorldState,
+        pred.Predictor,
+        mem.EpisodicMemory,
+        att.AttentionSystem,
+        council.Council,
+    )
+
+
+def test_snapshot_contains_all_views():
+    (
+        Snapshot,
+        World,
+        Predictor,
+        Memory,
+        Attention,
+        Council,
+    ) = load_modules()
+
+    world = World()
+    memory = Memory(capacity=10)
+    attention = Attention(memory, focus_size=3)
+
+    memory.record(
+        {"type": "pain_withdrawal", "strain": 0.9},
+        salience=0.8,
+    )
+    world.update(energy=4.0, strain=0.7)
+
+    predictor = Predictor(world, memory)
+    council = Council(world, memory, predictor, attention)
+
+    snap = Snapshot(world, memory, attention, predictor, council)
+    view = snap.capture()
+
+    assert "world" in view
+    assert "memory" in view
+    assert "attention" in view
+    assert "prediction" in view
+    assert "council" in v
+
