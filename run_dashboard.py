@@ -21,7 +21,16 @@ def load_module(name: str, relative_path: str):
     return module
 
 # --------------------------------------------------
-# LOAD CORE LIFE LOOP
+# LOAD WORLD
+# --------------------------------------------------
+world_time_mod = load_module("world_time", "09_WORLD_MODEL/time.py")
+world_state_mod = load_module("world_state", "09_WORLD_MODEL/world_state.py")
+
+WorldTime = world_time_mod.WorldTime
+WorldState = world_state_mod.WorldState
+
+# --------------------------------------------------
+# LOAD LIFE LOOP
 # --------------------------------------------------
 life_loop_mod = load_module(
     "life_loop",
@@ -30,19 +39,12 @@ life_loop_mod = load_module(
 LifeLoop = life_loop_mod.LifeLoop
 
 # --------------------------------------------------
-# LOAD PREDICTOR (SAFE FOR NUMBERED FOLDER)
-# --------------------------------------------------
-prediction_mod = load_module(
-    "prediction",
-    "09_WORLD_MODEL/prediction.py"
-)
-Predictor = prediction_mod.Predictor
-
-# --------------------------------------------------
 # SESSION STATE
 # --------------------------------------------------
 if "life" not in st.session_state:
-    st.session_state.life = LifeLoop()
+    world_time = WorldTime()
+    world_state = WorldState()
+    st.session_state.life = LifeLoop(world_time, world_state)
 
 if "run_ticks_remaining" not in st.session_state:
     st.session_state.run_ticks_remaining = 0
@@ -72,13 +74,13 @@ if st.sidebar.button("⏸ Pause"):
     st.session_state.run_ticks_remaining = 0
 
 # --------------------------------------------------
-# RUN LOOP (CONTROLLED)
+# RUN LOOP
 # --------------------------------------------------
 if st.session_state.run_ticks_remaining > 0:
     life.tick()
     st.session_state.run_ticks_remaining -= 1
     time.sleep(0.05)
-    st.experimental_rerun()
+    st.rerun()
 
 # --------------------------------------------------
 # DASHBOARD DISPLAY
@@ -92,18 +94,8 @@ st.json({
     "last_action": getattr(life.motor, "last_action", None),
     "time_internal": life.internal_time,
     "time_real": life.clock.now(),
+    "time_world": life.world_time.t,
 })
-
-st.subheader("🔮 Prediction")
-try:
-    predictor = Predictor(
-        world=None,
-        memory=life.memory
-    )
-    prediction = predictor.predict(horizon=2)
-    st.json(prediction)
-except Exception as e:
-    st.warning(f"Prediction unavailable: {e}")
 
 st.subheader("🧠 Recent Memory")
 st.json(life.memory.recent(5))

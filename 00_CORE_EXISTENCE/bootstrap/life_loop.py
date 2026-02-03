@@ -1,6 +1,6 @@
 """
 A7DO Minimal Runnable Life Loop (MRLL)
-TEST-LOCKED CORE + WORLD TIME INTEGRATION
+TEST-LOCKED CORE + WORLD INTEGRATION
 """
 
 import time
@@ -25,12 +25,6 @@ def load_module(name: str, relative_path: str):
 self_id_mod = load_module("self_id", "00_CORE_EXISTENCE/identity/self_id.py")
 clock_mod = load_module("clock", "00_CORE_EXISTENCE/heartbeat/clock.py")
 pulse_mod = load_module("pulse", "00_CORE_EXISTENCE/heartbeat/pulse.py")
-
-# --------------------------------------------------
-# WORLD
-# --------------------------------------------------
-world_time_mod = load_module("world_time", "09_WORLD_MODEL/time.py")
-world_state_mod = load_module("world_state", "09_WORLD_MODEL/world.py")
 
 # --------------------------------------------------
 # PHYSICS
@@ -69,9 +63,6 @@ SelfIdentity = self_id_mod.SelfIdentity
 SystemClock = clock_mod.SystemClock
 Pulse = pulse_mod.Pulse
 
-WorldTime = world_time_mod.WorldTime
-WorldState = world_state_mod.WorldState
-
 PhysicsGate = physics_mod.PhysicsGate
 
 EnergyBudget = energy_mod.EnergyBudget
@@ -85,26 +76,27 @@ ReflexArc = reflex_mod.ReflexArc
 GrossMotor = motor_mod.GrossMotor
 BodyOrientationSense = proprio_mod.BodyOrientationSense
 
-EpisodicMemory = episodic_mod.EpisodicMemory
+EpisodicMemory = episododic_mod = episodic_mod.EpisodicMemory
 
 
 class LifeLoop:
     """
     The ONLY place A7DO experiences the world.
+    World dependencies are injected (no nested loaders).
     """
 
-    def __init__(self):
+    def __init__(self, world_time, world_state):
         # Core
         self.identity = SelfIdentity()
-        self.clock = SystemClock()     # real-world elapsed time
+        self.clock = SystemClock()      # real-world elapsed time
         self.pulse = Pulse()
 
-        # A7DO internal (experiential) time
+        # Internal experiential time
         self.internal_time = 0
 
-        # World (independent of cognition)
-        self.world_time = WorldTime()
-        self.world = WorldState()
+        # Injected world
+        self.world_time = world_time
+        self.world = world_state
 
         # Physics / metabolism
         self.physics = PhysicsGate()
@@ -132,16 +124,14 @@ class LifeLoop:
             return
 
         try:
-            # ------------------------------------------
-            # INTENTIONAL TIME BOUNDARY
-            # ------------------------------------------
+            # ---- INTENTIONAL TIME BOUNDARY ----
             self.internal_time += 1
             real_time = self.clock.now()
 
-            # World advances independently
+            # World evolves independently
             self.world_time.tick(delta=1.0)
 
-            # A7DO samples the world HERE (and only here)
+            # A7DO samples world here
             self.world.update(
                 energy=self.energy.level(),
                 strain=self.overload.strain,
@@ -149,15 +139,11 @@ class LifeLoop:
                 time=self.world_time.t,
             )
 
-            # ------------------------------------------
-            # BASE METABOLISM
-            # ------------------------------------------
+            # Base metabolism
             self.physics.allow(1.0, self.energy.level())
             self.energy.spend(1.0)
 
-            # ------------------------------------------
-            # REFLEX / WITHDRAWAL
-            # ------------------------------------------
+            # Reflex / withdrawal
             if self.overload.strain > 0.5:
                 try:
                     self.physics.allow(0.5, self.energy.level())
@@ -178,9 +164,7 @@ class LifeLoop:
                 except Exception:
                     body_state = None
 
-                # ------------------------------------------
-                # MEMORY: EXPERIENCED WORLD
-                # ------------------------------------------
+                # Record experienced world
                 self.memory.record({
                     "type": "pain_withdrawal",
                     "body_state": body_state,
@@ -190,10 +174,10 @@ class LifeLoop:
                     "time_world": self.world_time.t,
                 })
 
-            # Load accumulates AFTER action
+            # Load accumulates after action
             self.overload.apply_load(0.1)
 
-            # Memory decay / pruning
+            # Memory decay
             self.memory.tick()
 
         except Exception as e:
@@ -204,10 +188,3 @@ class LifeLoop:
         while self.pulse.is_alive():
             self.tick()
             time.sleep(0.1)
-
-
-# --------------------------------------------------
-# ENTRY POINT
-# --------------------------------------------------
-if __name__ == "__main__":
-    LifeLoop().run()
