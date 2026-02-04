@@ -1,7 +1,7 @@
 """
 A7DO — Mobile Streamlit Entry Point
 
-This file exists ONLY to host and route
+This filE exists ONLY to host and route
 the existing dashboards in a mobile-friendly way.
 
 It does NOT create state.
