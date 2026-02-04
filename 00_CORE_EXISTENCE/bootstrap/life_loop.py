@@ -3,7 +3,6 @@ A7DO Life Loop
 Physics-governed, sleep-aware, memory-producing organism loop
 """
 
-import time
 import importlib.util
 from pathlib import Path
 
@@ -34,7 +33,7 @@ world_time_mod = load_module("world_time", "09_WORLD_MODEL/time.py")
 world_state_mod = load_module("world_state", "09_WORLD_MODEL/world_state.py")
 
 # --------------------------------------------------
-# PHYSICS — ENERGY
+# PHYSICS
 # --------------------------------------------------
 unified_energy_mod = load_module(
     "unified_energy",
@@ -53,7 +52,10 @@ fatigue_mod = load_module(
 # BODY
 # --------------------------------------------------
 motor_mod = load_module("motor", "03_BODY_SYSTEM/motor_control/gross_motor.py")
-proprio_mod = load_module("proprio", "04_SENSORY_SYSTEM/proprioception/body_orientation.py")
+proprio_mod = load_module(
+    "proprio",
+    "04_SENSORY_SYSTEM/proprioception/body_orientation.py"
+)
 
 # --------------------------------------------------
 # MEMORY
@@ -61,28 +63,13 @@ proprio_mod = load_module("proprio", "04_SENSORY_SYSTEM/proprioception/body_orie
 episodic_mod = load_module("episodic", "07_MEMORY_SYSTEM/episodic.py")
 
 # --------------------------------------------------
-# LIMBIC / VALUE SYSTEM
+# LIMBIC / VALUE
 # --------------------------------------------------
-salience_mod = load_module(
-    "salience",
-    "06_LIMBIC_AND_VALUE_SYSTEM/salience.py"
-)
-attention_mod = load_module(
-    "attention",
-    "06_LIMBIC_AND_VALUE_SYSTEM/attention.py"
-)
-emotion_mod = load_module(
-    "emotions",
-    "06_LIMBIC_AND_VALUE_SYSTEM/emotions.py"
-)
-curiosity_mod = load_module(
-    "curiosity",
-    "06_LIMBIC_AND_VALUE_SYSTEM/curiosity.py"
-)
-motivation_mod = load_module(
-    "motivation",
-    "06_LIMBIC_AND_VALUE_SYSTEM/motivation.py"
-)
+salience_mod = load_module("salience", "06_LIMBIC_AND_VALUE_SYSTEM/salience.py")
+attention_mod = load_module("attention", "06_LIMBIC_AND_VALUE_SYSTEM/attention.py")
+emotion_mod = load_module("emotions", "06_LIMBIC_AND_VALUE_SYSTEM/emotions.py")
+curiosity_mod = load_module("curiosity", "06_LIMBIC_AND_VALUE_SYSTEM/curiosity.py")
+motivation_mod = load_module("motivation", "06_LIMBIC_AND_VALUE_SYSTEM/motivation.py")
 action_energy_mod = load_module(
     "action_energy",
     "06_LIMBIC_AND_VALUE_SYSTEM/action_energy.py"
@@ -146,145 +133,90 @@ class LifeLoop:
         # Memory
         self.memory = EpisodicMemory()
 
-        # ----------------------------
-        # LIMBIC / VALUE
-        # ----------------------------
+        # Limbic
         self.salience = SalienceMap()
-
         self.emotion = EmotionSystem(self.salience)
         self.curiosity = CuriositySystem(self.salience)
         self.motivation = MotivationSystem(self.salience)
+        self.attention = AttentionSystem(self.memory, self.salience)
+        self.energy_learner = ActionEnergyLearner(self.salience)
 
-        self.attention = AttentionSystem(
-            memory=self.memory,
-            salience=self.salience,
-            focus_size=3
-        )
-
-        self.energy_learner = ActionEnergyLearner(
-            salience=self.salience
-        )
-
-    # --------------------------------------------------
-    # LIFE TICK
     # --------------------------------------------------
     def tick(self):
         if not self.pulse.is_alive():
             return
 
-        try:
-            # ------------------------------------------
-            # TIME
-            # ------------------------------------------
-            self.internal_time += 1
-            real_time = self.clock.now()
-            self.world_time.tick(delta=1.0)
+        self.internal_time += 1
+        self.world_time.tick(delta=1.0)
 
-            # ------------------------------------------
-            # SLEEP / WAKE DECISION
-            # ------------------------------------------
-            if self.fatigue.level >= 0.7:
-                self.sleep_wake.sleep()
-            elif self.fatigue.level <= 0.3:
-                self.sleep_wake.wake()
+        # Sleep / wake
+        if self.fatigue.level >= 0.7:
+            self.sleep_wake.sleep()
+        elif self.fatigue.level <= 0.3:
+            self.sleep_wake.wake()
 
-            awake = self.sleep_wake.awake
+        awake = self.sleep_wake.awake
 
-            # ------------------------------------------
-            # PHYSICS ENERGY UPDATE
-            # ------------------------------------------
-            self.energy.tick(
-                awake=awake,
-                strain=self.fatigue.level,
-                delta_t=1.0,
-                activity_cost=0.0
-            )
+        # Physics
+        self.energy.tick(
+            awake=awake,
+            strain=self.fatigue.level,
+            delta_t=1.0,
+            activity_cost=0.0,
+        )
 
-            # ------------------------------------------
-            # FATIGUE
-            # ------------------------------------------
-            if awake:
-                self.fatigue.add(0.05)
-            else:
-                self.fatigue.recover(0.1)
+        if awake:
+            self.fatigue.add(0.05)
+        else:
+            self.fatigue.recover(0.1)
 
-            # ------------------------------------------
-            # ACTION PHASE
-            # ------------------------------------------
-            action = None
-            body_state = None
+        # Action
+        if awake and self.fatigue.level > 0.5:
+            self.metabolism.spend(0.6)
+            action = self.motor.execute("withdraw_limb")
+            body_state = self.proprio.sense({"action": action})
 
-            if awake and self.fatigue.level > 0.5:
-                self.metabolism.spend(0.6)
-                action = self.motor.execute("withdraw_limb")
-                self.fatigue.add(0.2)
-
-                body_state = self.proprio.sense({"action": action})
-
-                self.memory.record({
+            self.memory.record({
+                "type": "action",
+                "event": {
                     "type": "action",
-                    "event": {
-                        "type": "action",
-                        "name": "withdraw_limb"
-                    },
-                    "body_state": body_state,
-                    "time_internal": self.internal_time,
-                    "time_real": real_time,
-                    "time_world": self.world_time.t,
-                })
+                    "name": "withdraw_limb",
+                },
+                "body_state": body_state,
+                "time_internal": self.internal_time,
+                "time_world": self.world_time.t,
+            })
 
-            # ------------------------------------------
-            # LIMBIC UPDATE (WRITERS)
-            # ------------------------------------------
-            if awake:
-                self.emotion.update(self.memory)
-                self.curiosity.update(self.memory)
-                self.motivation.update(self.memory)
+        # Limbic
+        if awake:
+            self.emotion.update(self.memory)
+            self.curiosity.update(self.memory)
+            self.motivation.update(self.memory)
+            self.salience.decay(rate=0.02)
 
-                self.salience.decay(rate=0.02)
+            focused = self.attention.focus()
+            self.energy_learner.learn(focused)
 
-                focused = self.attention.focus()
-                self.energy_learner.learn(focused)
-                
-                print("EMO:", self.emotion.current_state())
-                print("CUR:", self.curiosity.current_level())
-                print("MOT:", self.motivation.current_level())
-                print("SAL:", list(self.salience.all().items())[:5])
+        self.memory.tick()
 
-
-            # ------------------------------------------
-            # WORLD SNAPSHOT
-            # ------------------------------------------
-            self.world.update(
-                energy=self.energy.level,
-                strain=self.fatigue.level,
-                last_action=action,
-                time=self.world_time.t,
-            )
-
-            # ------------------------------------------
-            # MEMORY MAINTENANCE
-            # ------------------------------------------
-            self.memory.tick()
-
-            # ------------------------------------------
-            # TERMINATION
-            # ------------------------------------------
-            if self.energy.is_depleted():
-                self.pulse.set_state("dead")
-
-        except Exception:
+        if self.energy.is_depleted():
             self.pulse.set_state("dead")
 
     # --------------------------------------------------
-    def run(self, delay: float = 0.1):
-        while self.pulse.is_alive():
-            self.tick()
-            time.sleep(delay)
-
-
-# --------------------------------------------------
-# ENTRY POINT
-# --------------------------------------------------
-if __name__ == "__main__":
-    LifeLoop().run()
+    # DASHBOARD / DEBUG API
+    # --------------------------------------------------
+    def debug_snapshot(self) -> dict:
+        return {
+            "emotion": self.emotion.current_state(),
+            "curiosity": self.curiosity.current_level(),
+            "motivation": self.motivation.current_level(),
+            "salience": list(self.salience.all().items())[:10],
+            "focused": [
+                (m["id"], self.salience.get(m["id"]))
+                for m in self.attention.focus()
+            ],
+            "energy": self.energy.snapshot(),
+            "fatigue": self.fatigue.level,
+            "awake": self.sleep_wake.awake,
+            "alive": self.pulse.is_alive(),
+        }
