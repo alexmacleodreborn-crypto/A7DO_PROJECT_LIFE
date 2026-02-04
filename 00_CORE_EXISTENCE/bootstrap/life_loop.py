@@ -245,6 +245,12 @@ class LifeLoop:
 
                 focused = self.attention.focus()
                 self.energy_learner.learn(focused)
+                
+                print("EMO:", self.emotion.current_state())
+                print("CUR:", self.curiosity.current_level())
+                print("MOT:", self.motivation.current_level())
+                print("SAL:", list(self.salience.all().items())[:5])
+
 
             # ------------------------------------------
             # WORLD SNAPSHOT
