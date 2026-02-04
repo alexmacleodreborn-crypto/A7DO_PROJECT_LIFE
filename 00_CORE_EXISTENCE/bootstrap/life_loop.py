@@ -142,6 +142,18 @@ class LifeLoop:
         self.energy_learner = ActionEnergyLearner(self.salience)
 
     # --------------------------------------------------
+    # ACTION GATING (HARD LAW)
+    # --------------------------------------------------
+    def can_act(self, action_name: str, cost: float) -> bool:
+        if not self.pulse.is_alive():
+            return False
+        if not self.sleep_wake.awake:
+            return False
+        if self.energy.level < cost:
+            return False
+        return True
+
+    # --------------------------------------------------
     def tick(self):
         if not self.pulse.is_alive():
             return
@@ -170,22 +182,46 @@ class LifeLoop:
         else:
             self.fatigue.recover(0.1)
 
-        # Action
+        # ------------------------------------------
+        # ACTION PHASE (GATED + LOGGED)
+        # ------------------------------------------
         if awake and self.fatigue.level > 0.5:
-            self.metabolism.spend(0.6)
-            action = self.motor.execute("withdraw_limb")
-            body_state = self.proprio.sense({"action": action})
+            base_cost = 0.6
+            cost = self.energy_learner.cost("withdraw_limb", base_cost)
 
-            self.memory.record({
-                "type": "action",
-                "event": {
+            if self.can_act("withdraw_limb", cost):
+                self.metabolism.spend(cost)
+                action = self.motor.execute("withdraw_limb")
+                body_state = self.proprio.sense({"action": action})
+                self.fatigue.add(0.2)
+
+                # Successful action memory
+                self.memory.record({
                     "type": "action",
-                    "name": "withdraw_limb",
-                },
-                "body_state": body_state,
-                "time_internal": self.internal_time,
-                "time_world": self.world_time.t,
-            })
+                    "event": {
+                        "type": "action",
+                        "name": "withdraw_limb",
+                        "cost": cost,
+                    },
+                    "body_state": body_state,
+                    "time_internal": self.internal_time,
+                    "time_world": self.world_time.t,
+                })
+
+            else:
+                # Inhibited action memory
+                self.memory.record({
+                    "type": "inhibited_action",
+                    "event": {
+                        "type": "action",
+                        "name": "withdraw_limb",
+                        "reason": "insufficient_energy",
+                        "required": cost,
+                        "available": self.energy.level,
+                    },
+                    "time_internal": self.internal_time,
+                    "time_world": self.world_time.t,
+                })
 
         # Limbic
         if awake:
