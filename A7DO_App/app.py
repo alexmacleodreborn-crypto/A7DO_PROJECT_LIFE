@@ -1,44 +1,40 @@
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-import openpyxl
 import math
-import time
-import sys
-import random
 from pathlib import Path
 
-# ── Add engine to path ────────────────────────────────────────────────────────
-sys.path.insert(0, str(Path(__file__).parent))
-try:
-    from engine import A7DOState, A7DOParams, load_params, step as engine_step
-    ENGINE_AVAILABLE = True
-except ImportError:
-    ENGINE_AVAILABLE = False
+import openpyxl
+import pandas as pd
+import streamlit as st
+import plotly.graph_objects as go
 
-# ── Page config ───────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# CONFIG
+# ──────────────────────────────────────────────────────────────────────────────
+
 st.set_page_config(
-    page_title="A7DO Genesis Mind",
+    page_title="A7DO Genesis Mind — v6 Workbook",
     page_icon="🧬",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# ── Workbook path ─────────────────────────────────────────────────────────────
-_app_dir = Path(__file__).parent
-_xlsx_candidates = [
-    _app_dir / "excel_report" / "a7do-v6" / "A7DO_DNA_Master_v6.xlsx",
-    _app_dir.parent / "excel_report" / "a7do-v6" / "A7DO_DNA_Master_v6.xlsx",
-    Path("excel_report") / "a7do-v6" / "A7DO_DNA_Master_v6.xlsx",
-    _app_dir / "excel_report" / "a7do-final" / "A7DO_DNA_Master_v5_FINAL.xlsx",
-    _app_dir.parent / "excel_report" / "a7do-final" / "A7DO_DNA_Master_v5_FINAL.xlsx",
-]
-XLSX = next((p for p in _xlsx_candidates if p.exists()), _xlsx_candidates[0])
+# Assume repo layout:
+#   repo_root/
+#       app/app.py
+#       excel_report/a7do-v6/A7DO_DNA_Master_v6.xlsx
+APP_DIR = Path(__file__).parent
+REPO_ROOT = APP_DIR.parent
+XLSX_PATH = REPO_ROOT / "excel_report" / "a7do-v6" / "A7DO_DNA_Master_v6.xlsx"
 
-# ── Workbook helpers ──────────────────────────────────────────────────────────
+
+# ──────────────────────────────────────────────────────────────────────────────
+# WORKBOOK HELPERS
+# ──────────────────────────────────────────────────────────────────────────────
+
 @st.cache_resource
 def load_workbook():
-    return openpyxl.load_workbook(XLSX, data_only=True)
+    wb = openpyxl.load_workbook(XLSX_PATH, data_only=True)
+    return wb
+
 
 @st.cache_data
 def sheet_to_df(sheet_name: str) -> pd.DataFrame:
@@ -52,223 +48,320 @@ def sheet_to_df(sheet_name: str) -> pd.DataFrame:
             rows.append(list(row))
     if not rows:
         return pd.DataFrame()
+    # First row as header if it looks like text
+    header = rows[0]
+    if all(isinstance(c, str) or c is None for c in header):
+        return pd.DataFrame(rows[1:], columns=header)
     return pd.DataFrame(rows)
 
-# ── Engine params ─────────────────────────────────────────────────────────────
-@st.cache_resource
-def get_engine_params():
-    if ENGINE_AVAILABLE:
-        return load_params(XLSX)
-    return None
 
-# ── Real engine state cache ───────────────────────────────────────────────────
-@st.cache_data(max_entries=50)
-def get_engine_state_at_tick(target_tick: int):
-    """Run real engine to target_tick and return state dict. Cached per tick."""
-    if not ENGINE_AVAILABLE:
-        return None
-    params = get_engine_params()
-    state = A7DOState()
-    state.nutrients = 1.0
-    random.seed(42)
-    for t in range(target_tick):
-        stimulus = 0.3 + 0.4 * math.sin(t / 100.0) * 0.5 + 0.2
-        reward   = 0.05 + 0.03 * (t % 800 == 0)
-        engine_step(state, params, stimulus=stimulus, reward=reward)
-    # snapshot + derived metrics
-    snap = state.snapshot()
-    snap.update({
-        "height": round(state.height, 1),
-        "mass":   round(state.mass, 2),
-        "hr":     round(state.HR, 1),
-        "vocab":  state.vocab,
-        "motor":  state.motor_stage,
-        "tom":    state.tom_stage,
-        "perm":   state.object_perm,
-        "birth":  state.tick >= 3200,
-        "phase7": state.tick >= 96000,
-        "wisdom": round(state.wisdom, 3),
-        "ll_phase": state.ll_phase,
-        "C":      round(state.C, 3),
-        "pred_err": round(state.pred_error, 3),
-        "ltm":    state.ltm_events,
-        "stage":  state.life_stage(),
-        "ATP":    round(state.ATP, 3),
-        "O2":     round(state.O2, 3),
-        "grounding": round(state.grounding, 3),
-        "cultural": round(state.cultural_embedding, 3),
-        "identity": round(state.identity_confidence, 3),
-        "creativity": round(state.creativity, 3),
-        "career": round(state.career, 3),
-        "legacy": round(state.legacy, 3),
-        "scene_nodes": state.scene_graph_nodes,
-        "skill_avg": round(sum(state.skill_vector)/22, 3),
-        "narrative": round(state.narrative_coherence, 3),
-    })
-    return snap
+@st.cache_data
+def get_sheet_names():
+    return load_workbook().sheetnames
 
-# ── Surrogate fallback ────────────────────────────────────────────────────────
-def surrogate_state(tick: int) -> dict:
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ORGANISM STATE (SURROGATE, MATCHING YOUR SPEC)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def organism_state_from_tick(tick: int) -> dict:
+    """Rebuilds the v6 surrogate organism state from Tick, matching the workbook spec."""
     week = round(tick / 80)
-    height = 50 if week < 40 else min(50 + (177-50)*(1-math.exp(-0.005*(week-40))), 177)
-    mass   = 3.5 if week < 40 else min(3.5 + (70-3.5)*(1-math.exp(-0.004*(week-40))), 70)
-    hr     = 140 if week < 40 else max(70, 140-(140-70)*((week-40)/1160))
-    vocab  = round(50000/(1+math.exp(-0.05*(week-156)))) if week > 0 else 0
-    motor  = 5 if week>=400 else (4 if week>=260 else (3 if week>=160 else (2 if week>=80 else 1)))
-    tom    = 5 if week>=624 else (4 if week>=312 else (3 if week>=208 else (2 if week>=156 else 1)))
-    perm   = 3 if week>=52  else (2 if week>=44  else (1 if week>=36  else 0))
-    birth  = tick >= 3200
+
+    # Height / Mass / HR from your logistic approximations
+    height = 50 if week < 40 else min(50 + (177 - 50) * (1 - math.exp(-0.005 * (week - 40))), 177)
+    mass = 3.5 if week < 40 else min(3.5 + (70 - 3.5) * (1 - math.exp(-0.004 * (week - 40))), 70)
+    hr = 140 if week < 40 else max(70, 140 - (140 - 70) * ((week - 40) / 1160))
+
+    vocab = round(50000 / (1 + math.exp(-0.05 * (week - 156)))) if week > 0 else 0
+
+    motor = 5 if week >= 400 else (4 if week >= 260 else (3 if week >= 160 else (2 if week >= 80 else 1)))
+    tom = 5 if week >= 624 else (4 if week >= 312 else (3 if week >= 208 else (2 if week >= 156 else 1)))
+    perm = 3 if week >= 52 else (2 if week >= 44 else (1 if week >= 36 else 0))
+
+    birth = tick >= 3200
     phase7 = tick >= 96000
-    wisdom = min(0.1+((week-1200)/800)*0.9, 1.0) if week >= 1200 else 0.0
-    if   week >= 1200: stage = "Mature Adult"
-    elif week >= 1100: stage = "Mid Adult"
-    elif week >= 1000: stage = "Adult"
-    elif week >= 936:  stage = "Young Adult"
-    elif week >= 624:  stage = "Adolescent"
-    elif week >= 260:  stage = "Pre-Adolescent"
-    elif week >= 156:  stage = "Child"
-    elif week >= 80:   stage = "Toddler"
-    elif week >= 52:   stage = "Infant"
-    elif week >= 40:   stage = "Newborn"
-    elif week >= 28:   stage = "Fetal Late"
-    elif week >= 12:   stage = "Fetal Mid"
-    elif week >= 4:    stage = "Fetal Early"
-    else:              stage = "Embryo"
-    if tick % 800 == 0:  ll = "💤 Sleep Consolidation"
-    elif tick % 10 == 0: ll = "🔁 Repetition"
-    elif tick % 5 == 0:  ll = "🤝 Interaction"
-    else:                ll = "👁️ Exposure"
-    C        = min(0.05 + week/3000, 1.0)
-    pred_err = max(0.1, math.exp(-0.0001*tick))
-    ltm      = min(int(tick * 0.96), 200000)
+    wisdom = min(0.1 + ((week - 1200) / 800) * 0.9, 1.0) if week >= 1200 else 0.0
+
+    # Life stage map from DNA Loop Engine
+    if week >= 1400:
+        stage = "Elder"
+    elif week >= 1200:
+        stage = "Mature Adult"
+    elif week >= 1100:
+        stage = "Mid Adult"
+    elif week >= 1000:
+        stage = "Adult"
+    elif week >= 936:
+        stage = "Young Adult"
+    elif week >= 624:
+        stage = "Adolescent"
+    elif week >= 260:
+        stage = "Pre-Adolescent"
+    elif week >= 156:
+        stage = "Child"
+    elif week >= 80:
+        stage = "Toddler"
+    elif week >= 52:
+        stage = "Infant"
+    elif week >= 40:
+        stage = "Newborn"
+    elif week >= 28:
+        stage = "Fetal Late"
+    elif week >= 12:
+        stage = "Fetal Mid"
+    elif week >= 4:
+        stage = "Fetal Early"
+    else:
+        stage = "Embryo"
+
+    if tick % 800 == 0:
+        ll = "💤 Sleep Consolidation"
+    elif tick % 10 == 0:
+        ll = "🔁 Repetition"
+    elif tick % 5 == 0:
+        ll = "🤝 Interaction"
+    else:
+        ll = "👁️ Exposure"
+
+    C = min(0.05 + week / 3000, 1.0)
+    pred_err = max(0.1, math.exp(-0.0001 * tick))
+    ltm = min(int(tick * 0.96), 200000)
+
     return dict(
-        tick=tick, week=week, stage=stage,
-        height=round(height,1), mass=round(mass,2), hr=round(hr,1),
-        vocab=vocab, motor=motor, tom=tom, perm=perm,
-        birth=birth, phase7=phase7, wisdom=round(wisdom,3),
-        ll_phase=ll, C=round(C,3), pred_err=round(pred_err,3),
-        ltm=ltm, ATP=1.0, O2=0.94,
-        grounding=0.0, cultural=0.0, identity=0.0,
-        creativity=0.0, career=0.0, legacy=0.0,
-        scene_nodes=0, skill_avg=0.1, narrative=0.0
+        tick=tick,
+        week=week,
+        stage=stage,
+        height=round(height, 1),
+        mass=round(mass, 2),
+        hr=round(hr, 1),
+        vocab=vocab,
+        motor=motor,
+        tom=tom,
+        perm=perm,
+        birth=birth,
+        phase7=phase7,
+        wisdom=round(wisdom, 3),
+        ll_phase=ll,
+        C=round(C, 3),
+        pred_err=round(pred_err, 3),
+        ltm=ltm,
     )
 
-# ── Unified organism_state ────────────────────────────────────────────────────
-def organism_state(tick: int) -> dict:
-    if ENGINE_AVAILABLE and tick <= 20000:
-        try:
-            eng = get_engine_state_at_tick(tick)
-            if eng:
-                return eng
-        except Exception:
-            pass
-    return surrogate_state(tick)
 
-# ── Session state ─────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# PAGE RENDERERS
+# ──────────────────────────────────────────────────────────────────────────────
+
+def render_master_dashboard(state: dict):
+    st.title("🧬 A7DO GENESIS MIND — Master Dashboard v6")
+    st.caption(
+        f"Tick {state['tick']:,} · Week {state['week']} · {state['stage']} · {state['ll_phase']}"
+    )
+
+    if state["phase7"]:
+        st.success("🌟 Phase 7 ACTIVE — Wisdom / Creativity / Career / Legacy engines online")
+    elif state["birth"]:
+        st.info("🎉 Birth complete — postnatal development in progress")
+    else:
+        st.warning("⏳ Prenatal — Birth at Tick 3,200 (Week 40)")
+
+    # Key metrics
+    cols = st.columns(5)
+    metrics = [
+        ("📏 Height", f"{state['height']} cm"),
+        ("⚖️ Mass", f"{state['mass']} kg"),
+        ("❤️ Heart Rate", f"{state['hr']} bpm"),
+        ("💬 Vocabulary", f"{state['vocab']:,} words"),
+        ("🦾 Motor Stage", f"{state['motor']}/5"),
+        ("🧠 ToM Stage", f"{state['tom']}/5"),
+        ("👁️ Object Permanence", f"{state['perm']}/3"),
+        ("✨ Consciousness C", f"{state['C']}"),
+        ("💾 LTM Events", f"{state['ltm']:,}"),
+        ("🦉 Wisdom W(t)", f"{state['wisdom']}"),
+    ]
+    for i, (label, val) in enumerate(metrics):
+        with cols[i % 5]:
+            st.metric(label, val)
+
+    st.markdown("---")
+
+    # Developmental phase timeline (from your spec)
+    st.subheader("📈 Developmental Phase Timeline")
+    phases = [
+        ("Phase 1 — Biology & Embodiment", 0, 3200),
+        ("Phase 2 — Sensorimotor", 3200, 6400),
+        ("Phase 3 — Core Cognition", 6400, 12480),
+        ("Phase 4 — Social Cognition", 12480, 49920),
+        ("Phase 5 — Cultural & World", 49920, 74880),
+        ("Phase 6 — Identity", 74880, 96000),
+        ("Phase 7 — Wisdom", 96000, 160000),
+    ]
+    fig = go.Figure()
+    for name, start, end in phases:
+        fig.add_trace(
+            go.Bar(
+                x=[end - start],
+                y=[name],
+                base=[start],
+                orientation="h",
+                hovertemplate=f"{name}<br>Tick {start:,}–{end:,}<extra></extra>",
+            )
+        )
+    fig.add_vline(
+        x=state["tick"],
+        line_color="#f97316",
+        line_width=3,
+        annotation_text=f"Tick {state['tick']:,}",
+    )
+    fig.update_layout(
+        template="plotly_dark",
+        height=320,
+        showlegend=False,
+        xaxis_title="Tick",
+        margin=dict(l=0, r=0, t=20, b=0),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("---")
+
+    st.subheader("🗂️ Sheet Index (14 Sheets)")
+    index_df = pd.DataFrame(
+        [
+            (0, "🏠 Master Dashboard", "Core", "Live organism state · phase timeline · sheet index"),
+            (1, "🧬 DNA Loop Engine", "Core", "Master tick controller · lifecycle table · all derived formulas"),
+            (2, "📐 Phase 1 — Biology & Embodiment", "Phase 1", "Prenatal phases · birth transition · body systems"),
+            (3, "🦿 Phase 2 — Sensorimotor", "Phase 2", "Motor stages · rigid-body dynamics · reflexes"),
+            (4, "🧠 Phase 3 — Core Cognition", "Phase 3", "Object permanence · episodic memory · value system"),
+            (5, "🤝 Phase 4 — Social Cognition", "Phase 4", "Language grounding · Theory of Mind · seed vocabulary"),
+            (6, "🌍 Phase 5 — Cultural & World", "Phase 5", "Cultural stages · NPC network · BeenFore City"),
+            (7, "🪪 Phase 6 — Identity", "Phase 6", "Identity stages · equations · 22-dim skill graph"),
+            (8, "✨ Phase 7 — Wisdom", "Phase 7", "EQ_CREAT_17 · EQ_WISDOM_18 · EQ_CAREER_19 · EQ_LEGACY_20"),
+            (9, "🚀 Phase 8 — AGI Architecture", "Phase 8", "AGI readiness · Vision V1 · Motor M1 · Planning P2"),
+            (10, "🔄 Learning Loop", "Learning", "4-stage cycle · word pipeline · web-hook learning"),
+            (11, "⚙️ System Reference", "Meta", "52 parameters · 24 engine registry · tick schedule"),
+            (12, "👩 Lorraine — Parent Profile", "Profile", "Full biological · psychological · social profile"),
+            (13, "👨 China — Parent Profile", "Profile", "Full biological · psychological · social profile"),
+        ],
+        columns=["#", "Sheet", "Category", "Key Content"],
+    )
+    st.dataframe(index_df, use_container_width=True, hide_index=True)
+
+
+def render_sheet_view(sheet_name: str):
+    st.subheader(f"📄 Sheet: {sheet_name}")
+    df = sheet_to_df(sheet_name)
+    if df.empty:
+        st.info("No data or sheet not found.")
+    else:
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def render_phase_page(title: str, sheet_name: str):
+    st.title(title)
+    st.caption("Source: A7DO_DNA_Master_v6 · Change Tick in sidebar to explore lifecycle.")
+    render_sheet_view(sheet_name)
+
+
+def render_learning_loop():
+    st.title("🔄 Learning Loop — Experience-First Architecture")
+    render_sheet_view("🔄 Learning Loop")
+
+
+def render_system_reference():
+    st.title("⚙️ System Reference — Parameters · Equations · Engine Registry")
+    render_sheet_view("⚙️ System Reference")
+
+
+def render_profiles():
+    tab1, tab2 = st.tabs(["👩 Lorraine — Parent Profile", "👨 China — Parent Profile"])
+    with tab1:
+        render_sheet_view("👩 Lorraine — Parent Profile")
+    with tab2:
+        render_sheet_view("👨 China — Parent Profile")
+
+
+def render_all_sheets_explorer():
+    st.title("📊 All Sheets Explorer")
+    names = get_sheet_names()
+    sheet = st.selectbox("Select sheet", names)
+    render_sheet_view(sheet)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# SIDEBAR & ROUTER
+# ──────────────────────────────────────────────────────────────────────────────
+
 if "tick" not in st.session_state:
     st.session_state.tick = 0
-if "page" not in st.session_state:
-    st.session_state.page = "🏠 Master Dashboard"
-if "auto_step" not in st.session_state:
-    st.session_state.auto_step = False
-if "auto_speed" not in st.session_state:
-    st.session_state.auto_speed = 80
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 🧬 A7DO Genesis Mind")
-    st.markdown("**v7 Engine · 24 runtime engines**")
+    st.markdown("## 🧬 A7DO Genesis Mind — v6")
+    st.markdown("Clean 14-sheet rebuild · All phases 1–8")
     st.divider()
 
-    tick = st.slider("⚡ Current Tick", 0, 160000,
-                     int(st.session_state.tick), step=80)
+    tick = st.slider("⚡ Current Tick", 0, 160000, st.session_state.tick, step=80)
     st.session_state.tick = tick
-    s = organism_state(tick)
-    st.caption(f"Week {s['week']} · {s['stage']}")
+    state = organism_state_from_tick(tick)
+    st.caption(f"Week {state['week']} · {state['stage']}")
     st.divider()
 
-    PAGES = [
+    pages = [
         "🏠 Master Dashboard",
-        "📈 Growth Timeline",
-        "🧬 Biology",
-        "🧠 Cognition & Phase 4",
-        "🔄 Learning Loop",
-        "🦿 Movement Engine",
-        "🗣️ Word Learning Engine",
-        "🔊 Speech Production",
-        "🌍 Phase 5 — Cultural Layer",
-        "🪪 Phase 6 — Identity Layer",
+        "📐 Phase 1 — Biology & Embodiment",
+        "🦿 Phase 2 — Sensorimotor",
+        "🧠 Phase 3 — Core Cognition",
+        "🤝 Phase 4 — Social Cognition",
+        "🌍 Phase 5 — Cultural & World",
+        "🪪 Phase 6 — Identity",
         "✨ Phase 7 — Wisdom",
+        "🚀 Phase 8 — AGI Architecture",
+        "🔄 Learning Loop",
+        "⚙️ System Reference",
+        "👤 Parent Profiles",
         "📊 All Sheets Explorer",
     ]
-    page = st.radio("Navigate", PAGES,
-                    index=PAGES.index(st.session_state.page),
-                    label_visibility="collapsed")
-    st.session_state.page = page
+    page = st.radio("Navigate", pages, label_visibility="collapsed")
 
-state = organism_state(st.session_state.tick)
-tick = st.session_state.tick
+# ──────────────────────────────────────────────────────────────────────────────
+# ROUTE
+# ──────────────────────────────────────────────────────────────────────────────
 
-# ── PAGE: MASTER DASHBOARD ────────────────────────────────────────────────────
 if page == "🏠 Master Dashboard":
-    # (copy your existing Master Dashboard content here)
-    st.title("🧬 A7DO Genesis Mind — Master Dashboard")
-    st.caption(f"Tick {tick:,} · Week {state['week']} · {state['stage']} · {state['ll_phase']}")
-    # … metrics, plots, etc …
+    render_master_dashboard(state)
 
-# ── PAGE: GROWTH TIMELINE ─────────────────────────────────────────────────────
-elif page == "📈 Growth Timeline":
-    st.title("📈 Growth Timeline")
-    # add growth plots / tables here
+elif page == "📐 Phase 1 — Biology & Embodiment":
+    render_phase_page("📐 Phase 1 — Biology & Embodiment", "📐 Phase 1 — Biology & Embodiment")
 
-# ── PAGE: BIOLOGY ─────────────────────────────────────────────────────────────
-elif page == "🧬 Biology":
-    st.title("🧬 Biology")
-    # add biology visualisations here
+elif page == "🦿 Phase 2 — Sensorimotor":
+    render_phase_page("🦿 Phase 2 — Sensorimotor", "🦿 Phase 2 — Sensorimotor")
 
-# ── PAGE: COGNITION & PHASE 4 ────────────────────────────────────────────────
-elif page == "🧠 Cognition & Phase 4":
-    st.title("🧠 Cognition & Phase 4")
-    # move your tabbed cognition UI here
+elif page == "🧠 Phase 3 — Core Cognition":
+    render_phase_page("🧠 Phase 3 — Core Cognition", "🧠 Phase 3 — Core Cognition")
 
-# ── PAGE: LEARNING LOOP ──────────────────────────────────────────────────────
-elif page == "🔄 Learning Loop":
-    st.title("🔄 Learning Loop — Experience-First Architecture")
-    # move your learning loop content here
+elif page == "🤝 Phase 4 — Social Cognition":
+    render_phase_page("🤝 Phase 4 — Social Cognition", "🤝 Phase 4 — Social Cognition")
 
-# ── PAGE: MOVEMENT ENGINE ────────────────────────────────────────────────────
-elif page == "🦿 Movement Engine":
-    st.title("🦿 Movement Engine")
-    # add movement engine UI here
+elif page == "🌍 Phase 5 — Cultural & World":
+    render_phase_page("🌍 Phase 5 — Cultural & World", "🌍 Phase 5 — Cultural & World")
 
-# ── PAGE: WORD LEARNING ENGINE ───────────────────────────────────────────────
-elif page == "🗣️ Word Learning Engine":
-    st.title("🗣️ Word Learning Engine")
-    # add word learning UI here
+elif page == "🪪 Phase 6 — Identity":
+    render_phase_page("🪪 Phase 6 — Identity", "🪪 Phase 6 — Identity")
 
-# ── PAGE: SPEECH PRODUCTION ──────────────────────────────────────────────────
-elif page == "🔊 Speech Production":
-    st.title("🔊 Speech Production")
-    # add speech production UI here
-
-# ── PAGE: CULTURAL LAYER ─────────────────────────────────────────────────────
-elif page == "🌍 Phase 5 — Cultural Layer":
-    st.title("🌍 Phase 5 — Cultural Layer")
-    # show cultural_embedding, related sheets, etc.
-
-# ── PAGE: IDENTITY LAYER ─────────────────────────────────────────────────────
-elif page == "🪪 Phase 6 — Identity Layer":
-    st.title("🪪 Phase 6 — Identity Layer")
-    # show identity_confidence, narrative, etc.
-
-# ── PAGE: PHASE 7 — WISDOM ───────────────────────────────────────────────────
 elif page == "✨ Phase 7 — Wisdom":
-    st.title("✨ Phase 7 — Wisdom & Legacy")
-    # show wisdom, creativity, career, legacy
+    render_phase_page("✨ Phase 7 — Wisdom", "✨ Phase 7 — Wisdom")
 
-# ── PAGE: ALL SHEETS EXPLORER ────────────────────────────────────────────────
+elif page == "🚀 Phase 8 — AGI Architecture":
+    render_phase_page("🚀 Phase 8 — AGI Architecture", "🚀 Phase 8 — AGI Architecture")
+
+elif page == "🔄 Learning Loop":
+    render_learning_loop()
+
+elif page == "⚙️ System Reference":
+    render_system_reference()
+
+elif page == "👤 Parent Profiles":
+    render_profiles()
+
 elif page == "📊 All Sheets Explorer":
-    st.title("📊 All Sheets Explorer")
-    sheet_names = load_workbook().sheetnames
-    sheet = st.selectbox("Select sheet", sheet_names)
-    st.dataframe(sheet_to_df(sheet), use_container_width=True, hide_index=True)
+    render_all_sheets_explorer()
